@@ -81,6 +81,15 @@ def buy_group(seating, purchases):
         print(f"Booked seats: {', '.join(seats)}. Total: ${total:.2f}")
     else:
         print("No space for group.")
+
+# Search purchase
+def search_purchase(purchases):
+    name = input("Search name: ")
+    if name in purchases:
+        print(purchases[name])
+    else:
+        print("Not found.")
+
 # Show all
 def show_all(purchases):
     total = 0
@@ -95,11 +104,12 @@ def main():
     seating = load_data("seating.json", create_seating())
     purchases = load_data("purchases.json", {})
     while True:
-        print("\n[V] View  [B] Buy  [G] Group  [D] Display  [Q] Quit")
+        print("\n[V] View  [B] Buy  [G] Group  [S] Search  [D] Display  [Q] Quit")
         c = input("Choose: ").upper()
         if c == "V": print_seating(seating)
         elif c == "B": buy_single(seating, purchases)
         elif c == "G": buy_group(seating, purchases)
+        elif c == "S": search_purchase(purchases)
         elif c == "D": show_all(purchases)
         elif c == "Q": break
 
