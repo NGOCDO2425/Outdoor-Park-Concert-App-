@@ -4,114 +4,103 @@ ROWS, COLS = 20, 26
 AVAILABLE, OCCUPIED = "a", "X"
 MASK_FEE, TAX_RATE = 5, 0.0725
 
-# Get ticket price
+# Ticket price by row
 def get_price(row):
     return 80 if row <= 4 else 50 if row <= 10 else 25
 
-# Create empty seating chart
+# Create seating
 def create_seating():
     return [[AVAILABLE] * COLS for _ in range(ROWS)]
 
-# Load JSON data (create if missing)
+# Load/save
 def load_data(file, default):
     try:
         with open(file, "r") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except:
         save_data(default, file)
         return default
 
-# Save data to JSON
 def save_data(data, file):
     with open(file, "w") as f:
-        json.dump(data, f, indent=4)
+        json.dump(data, f)
 
-# Show seating chart
-def print_seating():
-    seating = load_data("seating.json", create_seating())
+# Show seating
+def print_seating(seating):
     print("\n   " + " ".join(chr(65 + i) for i in range(COLS)))
     for i, row in enumerate(seating):
         print(f"{i:2} {' '.join(row)}")
 
-# Show available seats
-def print_available_seats():
-    seating = load_data("seating.json", create_seating())
-    available = [f"{r}{chr(c+65)}" for r in range(ROWS) for c in range(COLS) if seating[r][c] == AVAILABLE]
-    print("\n✅ Available Seats:", ", ".join(available) if available else "None")
-
-# Check seat availability
+# Social distancing check
 def is_seat_available(seating, row, col):
-    return 0 <= row < ROWS and 0 <= col < COLS and seating[row][col] == AVAILABLE
+    if seating[row][col] != AVAILABLE:
+        return False
+    for r in range(row - 2, row + 3):
+        for c in range(col - 2, col + 3):
+            if 0 <= r < ROWS and 0 <= c < COLS and seating[r][c] == OCCUPIED:
+                return False
+    return True
 
-# Generate receipt and update accounting
-def generate_receipt(name, email, row, col, total):
-    receipt = {
-        "Name": name,
-        "Email": email,
-        "Seat": f"{row}{chr(col+65)}",
-        "Total Price": f"${total:.2f}"
-    }
-    print("\n📜 Receipt:")
-    for key, value in receipt.items():
-        print(f"{key}: {value}")
+# Find block for group
+def find_available_block(seating, row, count):
+    for col in range(COLS - count):
+        if all(is_seat_available(seating, row, col + i) for i in range(count)):
+            return col
+    return None
 
-    # Save to accounting file
-    accounting = load_data("accounting.json", [])
-    accounting.append(receipt)
-    save_data(accounting, "accounting.json")
-
-# Buy ticket function
-def buy_ticket():
-    seating = load_data("seating.json", create_seating())
-    purchases = load_data("purchases.json", {})
-
-    name = input("Name: ")
-    email = input("Email: ")
+# Buy one seat
+def buy_single(seating, purchases):
+    name, email = input("Name: "), input("Email: ")
     row = int(input("Row (0-19): "))
     col = ord(input("Col (A-Z): ").upper()) - 65
-
     if is_seat_available(seating, row, col):
         seating[row][col] = OCCUPIED
         price = get_price(row)
-        total = round(price + price * TAX_RATE + MASK_FEE, 2)
-
-        purchases[name] = {"email": email, "seat": f"{row}{chr(col+65)}", "total": total}
-
+        total = price + price * TAX_RATE + MASK_FEE
+        purchases[name] = {"email": email, "seat": f"{row}{chr(col+65)}", "total": round(total, 2)}
         save_data(seating, "seating.json")
         save_data(purchases, "purchases.json")
-
-        print(f"\n✅ {name} booked {row}{chr(col+65)}. Total: ${total:.2f}")
-
-        # Generate receipt and save to accounting
-        generate_receipt(name, email, row, col, total)
-
+        print(f"Booked {row}{chr(col+65)}. Total: ${total:.2f}")
     else:
-        print("\n❌ Seat not available. Try another one.")
+        print("Seat not available.")
+
+# Buy group seats
+def buy_group(seating, purchases):
+    name, email = input("Name: "), input("Email: ")
+    row, count = int(input("Row (0-19): ")), int(input("#Tickets: "))
+    start = find_available_block(seating, row, count)
+    if start is not None:
+        seats = [f"{row}{chr(start + i + 65)}" for i in range(count)]
+        for i in range(count):
+            seating[row][start + i] = OCCUPIED
+        price = get_price(row) * count
+        total = price + price * TAX_RATE + MASK_FEE
+        purchases[name] = {"email": email, "seats": seats, "total": round(total, 2)}
+        save_data(seating, "seating.json")
+        save_data(purchases, "purchases.json")
+        print(f"Booked seats: {', '.join(seats)}. Total: ${total:.2f}")
+    else:
+        print("No space for group.")
+# Show all
+def show_all(purchases):
+    total = 0
+    for name, info in purchases.items():
+        seats = info.get("seats", info.get("seat"))
+        print(f"{name}: {seats} | ${info['total']:.2f}")
+        total += info['total']
+    print(f"Total revenue: ${total:.2f}")
 
 # Main menu
 def main():
+    seating = load_data("seating.json", create_seating())
+    purchases = load_data("purchases.json", {})
     while True:
-        print("\n[V] View Seating  [A] Available Seats  [B] Buy Ticket  [R] Receipts  [Q] Quit")
-        choice = input("Choose: ").upper()
+        print("\n[V] View  [B] Buy  [G] Group  [D] Display  [Q] Quit")
+        c = input("Choose: ").upper()
+        if c == "V": print_seating(seating)
+        elif c == "B": buy_single(seating, purchases)
+        elif c == "G": buy_group(seating, purchases)
+        elif c == "D": show_all(purchases)
+        elif c == "Q": break
 
-        if choice == "V":
-            print_seating()
-        elif choice == "A":
-            print_available_seats()
-        elif choice == "B":
-            buy_ticket()
-        elif choice == "R":
-            receipts = load_data("accounting.json", [])
-            if receipts:
-                print("\n📜 All Receipts:")
-                for receipt in receipts:
-                    print(receipt)
-            else:
-                print("\n❌ No purchases yet.")
-        elif choice == "Q":
-            break
-        else:
-            print("\n❌ Invalid option, try again.")
-
-if __name__ == "__main__":
-    main()
+main()
